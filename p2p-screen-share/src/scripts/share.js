@@ -1,40 +1,28 @@
+const VIEWER_ID = 'viewer-1';
+let peer;
+let activeCall;
+
 const startScreenShare = async () => {
     try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: true
-        });
-        const peerConnection = new RTCPeerConnection();
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        peer = new Peer('sharer-1', { host: 'peerjs.com', secure: true, port: 443 });
 
-        stream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, stream);
+        peer.on('open', () => {
+            activeCall = peer.call(VIEWER_ID, screenStream);
+            activeCall?.on('error', console.error);
         });
 
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-
-        // Send the offer to the viewer (implement signaling here)
-        // Example: signalingServer.send({ offer });
-
-        peerConnection.onicecandidate = event => {
-            if (event.candidate) {
-                // Send the candidate to the viewer (implement signaling here)
-                // Example: signalingServer.send({ candidate: event.candidate });
-            }
-        };
-
-        // Handle incoming answer from viewer (implement signaling here)
-        // Example: peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    } catch (error) {
-        console.error("Error starting screen share:", error);
+        peer.on('error', console.error);
+    } catch (err) {
+        console.error('Error starting screen share:', err);
     }
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("startShare");
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('startShare');
     if (!btn) {
-        console.error("startShare button not found in DOM");
+        console.error('startShare button not found in DOM');
         return;
     }
-    btn.addEventListener("click", startScreenShare);
+    btn.addEventListener('click', startScreenShare);
 });
