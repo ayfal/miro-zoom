@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>PeerSharing — Viewer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 900px; }
+    textarea { width: 100%; height: 120px; font-family: monospace; }
+    video { width: 100%; max-height: 480px; background:#000; }
+    input[type=text] { width:100%;}
+  </style>
+</head>
+<body>
+  <h1>PeerSharing — Viewer</h1>
+  <p>This page reads the compressed offer from the URL (?o=...) and produces a compressed answer to paste back to the sender.</p>
+
+  <div id="status">Waiting for offer in URL...</div>
+
+  <h3>Incoming preview</h3>
+  <video id="remote" autoplay playsinline></video>
+
+  <h3>Your compressed answer (copy & paste to sender)</h3>
+  <textarea id="answerOut" readonly placeholder="Answer will appear here after creating it"></textarea>
+  <button id="btnCopy">Copy Answer</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <script>
+    function waitForIceComplete(pc, timeout = 10000) {
+      return new Promise((resolve, reject) => {
+        if (pc.iceGatheringState === 'complete') return resolve();
+        const timer = setTimeout(() => {
+          pc.onicecandidate = null;
+          resolve();
+        }, timeout);
+        pc.onicecandidate = (e) => {
+          if (!e.candidate) {
+            clearTimeout(timer);
+            pc.onicecandidate = null;
+            resolve();
+          }
+        };
+      });
+    }
+
+    const params = new URLSearchParams(location.search);
+    const compressedOffer = params.get('o');
+    const status = document.getElementById('status');
+    const remote = document.getElementById('remote');
+    const answerOut = document.getElementById('answerOut');
+    const btnCopy = document.getElementById('btnCopy');
+
+    (async () => {
+      if (!compressedOffer) {
+        status.textContent = 'No offer found in URL (use the sender link).';
+        return;
+      }
+      try {
+        status.textContent = 'Parsing offer...';
+        const json = LZString.decompressFromEncodedURIComponent(compressedOffer);
+        if (!json) throw new Error('Failed to decompress offer.');
+        const offer = JSON.parse(json);
+
+        const pc = new RTCPeerConnection();
+        pc.ontrack = (evt) => {
+          remote.srcObject = evt.streams[0];
+        };
+
+        status.textContent = 'Setting remote description...';
+        await pc.setRemoteDescription(offer);
+
+        status.textContent = 'Creating answer...';
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        status.textContent = 'Waiting for ICE gathering to complete...';
+        await waitForIceComplete(pc, 10000);
+
+        const fullAnswer = pc.localDescription;
+        const payload = JSON.stringify(fullAnswer);
+        const compressed = LZString.compressToEncodedURIComponent(payload);
+        answerOut.value = compressed;
+        status.textContent = 'Answer ready. Copy it and paste back to sender.';
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Error: ' + err;
+      }
+    })();
+
+    btnCopy.onclick = () => {
+      answerOut.select();
+      document.execCommand('copy');
+    };
+  </script>
+</body>
+</html>

@@ -1,165 +1,136 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Screen Share - Sender</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            background: #2c3e50;
-            color: white;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        h1 {
-            font-size: 3em;
-            text-align: center;
-        }
-        button {
-            width: 100%;
-            padding: 30px;
-            font-size: 2em;
-            margin: 20px 0;
-            cursor: pointer;
-            border: none;
-            border-radius: 10px;
-            background: #3498db;
-            color: white;
-        }
-        button:hover {
-            background: #2980b9;
-        }
-        button:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
-        }
-        #linkOutput {
-            background: white;
-            color: black;
-            padding: 20px;
-            border-radius: 10px;
-            word-break: break-all;
-            font-size: 1.2em;
-            margin: 20px 0;
-            display: none;
-        }
-        #answerInput {
-            width: 100%;
-            padding: 20px;
-            font-size: 1.5em;
-            margin: 20px 0;
-            border-radius: 10px;
-            border: 2px solid #3498db;
-            box-sizing: border-box;
-        }
-        .status {
-            text-align: center;
-            font-size: 1.5em;
-            margin: 20px 0;
-            padding: 20px;
-            border-radius: 10px;
-            background: #34495e;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <title>PeerSharing — Sender</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 900px; }
+    textarea { width: 100%; height: 120px; font-family: monospace; }
+    input[type=text] { width: 100%; }
+    video { width: 48%; max-height: 360px; background: #000; }
+    .row { display:flex; gap:8px; align-items:flex-start; margin-top:8px; }
+    .col { flex:1; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Screen Share - Sender</h1>
-        
-        <button id="startBtn">Start Screen Share</button>
-        
-        <div id="linkOutput"></div>
-        
-        <textarea id="answerInput" placeholder="Paste the answer from your partner here..." style="display:none;"></textarea>
-        
-        <button id="connectBtn" style="display:none;">Connect</button>
-        
-        <div class="status" id="status">Click "Start Screen Share" to begin</div>
+  <h1>PeerSharing — Sender</h1>
+
+  <p>This page will capture your microphone + screen, create an SDP offer and produce a compressed viewer link. Paste the viewer's compressed answer below and click "Set Answer".</p>
+
+  <button id="btnOffer">Generate Offer & Viewer Link</button>
+  <div id="status"></div>
+
+  <h3>Viewer link (share this)</h3>
+  <input type="text" id="viewerLink" readonly />
+
+  <h3>Local / Remote preview</h3>
+  <div class="row">
+    <div class="col">
+      <p>Local (screen)</p>
+      <video id="localVideo" autoplay playsinline muted></video>
     </div>
+    <div class="col">
+      <p>Remote (what viewer receives)</p>
+      <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+  </div>
 
-    <script>
-        let peerConnection = null;
-        let dataChannel = null;
+  <h3>Paste compressed answer from viewer</h3>
+  <textarea id="answerArea" placeholder="Paste compressed answer here (viewer->copy)"></textarea>
+  <button id="btnSetAnswer">Set Answer & Start</button>
 
-        const startBtn = document.getElementById('startBtn');
-        const linkOutput = document.getElementById('linkOutput');
-        const answerInput = document.getElementById('answerInput');
-        const connectBtn = document.getElementById('connectBtn');
-        const status = document.getElementById('status');
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <script>
+    // Minimal helper: wait for ICE gathering to finish (onicecandidate null indicates done)
+    function waitForIceComplete(pc, timeout = 10000) {
+      return new Promise((resolve, reject) => {
+        if (pc.iceGatheringState === 'complete') return resolve();
+        const timer = setTimeout(() => {
+          pc.onicecandidate = null;
+          resolve(); // timeout: proceed anyway
+        }, timeout);
+        pc.onicecandidate = (e) => {
+          if (!e.candidate) {
+            clearTimeout(timer);
+            pc.onicecandidate = null;
+            resolve();
+          }
+        };
+      });
+    }
 
-        const config = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+    let pc;
+    let localStream;
+    const btnOffer = document.getElementById('btnOffer');
+    const viewerLink = document.getElementById('viewerLink');
+    const status = document.getElementById('status');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const answerArea = document.getElementById('answerArea');
+    const btnSetAnswer = document.getElementById('btnSetAnswer');
+
+    btnOffer.onclick = async () => {
+      try {
+        status.textContent = 'Creating peer connection and gathering local media...';
+        pc = new RTCPeerConnection();
+
+        // Show remote tracks when they arrive (viewer side would show what sender sends)
+        pc.ontrack = (evt) => {
+          remoteVideo.srcObject = evt.streams[0];
         };
 
-        startBtn.addEventListener('click', async () => {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { cursor: "always" },
-                    audio: false
-                });
+        // Get microphone + screen
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
 
-                peerConnection = new RTCPeerConnection(config);
+        // Combine streams: add audio tracks and screen tracks to PC, show local preview as combined stream
+        localStream = new MediaStream();
+        audioStream.getAudioTracks().forEach(t => { pc.addTrack(t, audioStream); localStream.addTrack(t); });
+        screenStream.getVideoTracks().forEach(t => { pc.addTrack(t, screenStream); localStream.addTrack(t); });
 
-                stream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, stream);
-                });
+        localVideo.srcObject = localStream;
 
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
+        // Create offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-                // Wait for ICE gathering to complete
-                await new Promise(resolve => {
-                    if (peerConnection.iceGatheringState === 'complete') {
-                        resolve();
-                    } else {
-                        peerConnection.addEventListener('icegatheringstatechange', () => {
-                            if (peerConnection.iceGatheringState === 'complete') {
-                                resolve();
-                            }
-                        });
-                    }
-                });
+        status.textContent = 'Waiting for ICE gathering to complete...';
+        await waitForIceComplete(pc, 10000);
 
-                const offerData = btoa(JSON.stringify(peerConnection.localDescription));
-                const receiverUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html?offer=${offerData}`;
-                
-                linkOutput.textContent = receiverUrl;
-                linkOutput.style.display = 'block';
-                answerInput.style.display = 'block';
-                connectBtn.style.display = 'block';
-                startBtn.disabled = true;
-                
-                status.textContent = 'Send this link to your partner →';
-                status.style.background = '#27ae60';
+        // Use the finalized localDescription
+        const fullOffer = pc.localDescription;
+        const payload = JSON.stringify(fullOffer);
+        const compressed = LZString.compressToEncodedURIComponent(payload);
 
-            } catch (err) {
-                status.textContent = 'Error: ' + err.message;
-                status.style.background = '#e74c3c';
-            }
-        });
+        // Build viewer URL (viewer.html in same folder)
+        const url = window.location.origin + window.location.pathname.replace(/index\.html?$/,'viewer.html') + '?o=' + compressed;
+        viewerLink.value = url;
+        status.textContent = 'Offer ready. Share the viewer link.';
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Error: ' + err;
+      }
+    };
 
-        connectBtn.addEventListener('click', async () => {
-            try {
-                const answerData = JSON.parse(atob(answerInput.value.trim()));
-                await peerConnection.setRemoteDescription(answerData);
-                
-                status.textContent = 'Connected! Screen sharing active.';
-                status.style.background = '#27ae60';
-                connectBtn.disabled = true;
-                
-            } catch (err) {
-                status.textContent = 'Error connecting: ' + err.message;
-                status.style.background = '#e74c3c';
-            }
-        });
-    </script>
+    btnSetAnswer.onclick = async () => {
+      if (!pc) {
+        status.textContent = 'No peer connection. Generate an offer first.';
+        return;
+      }
+      const compressed = answerArea.value.trim();
+      if (!compressed) { status.textContent = 'Paste compressed answer first.'; return; }
+      try {
+        status.textContent = 'Decoding answer and setting remote description...';
+        const json = LZString.decompressFromEncodedURIComponent(compressed);
+        if (!json) throw new Error('Failed to decompress answer.');
+        const answer = JSON.parse(json);
+        await pc.setRemoteDescription(answer);
+        status.textContent = 'Remote description set. Connection should establish when tracks arrive.';
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Error: ' + err;
+      }
+    };
+  </script>
 </body>
 </html>
