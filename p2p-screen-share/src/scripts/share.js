@@ -30,4 +30,4 @@ const startScreenShare = async () => {
     }
 };
 
-document.getElementById("startShareButton").addEventListener("click", startScreenShare);
+document.getElementById("startShare")?.addEventListener("click", startScreenShare);
