@@ -1,48 +1,25 @@
 const VIEWER_ID = 'viewer-1';
 let pc;
 
-const startScreenShare = async () => {
-    try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        
-        pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-        });
-        
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-        
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        // Wait for ICE gathering
-        await new Promise(resolve => {
-            if (pc.iceGatheringState === 'complete') resolve();
-            else pc.onicegatheringstatechange = () => {
-                if (pc.iceGatheringState === 'complete') resolve();
-            };
-        });
-        
-        const offerCode = btoa(JSON.stringify(pc.localDescription));
-        document.getElementById('offerCode').value = offerCode;
-        document.getElementById('offerSection').style.display = 'block';
-        
-        // Listen for answer
-        document.getElementById('submitAnswer').onclick = async () => {
-            const answerCode = document.getElementById('answerInput').value.trim();
-            const answer = JSON.parse(atob(answerCode));
-            await pc.setRemoteDescription(answer);
-        };
-        
-    } catch (err) {
-        console.error('Error:', err);
-    }
-};
+const ROOM = 'dkj5ks3sm8a'; // pick any secret string
 
 document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('startShare');
-    if (!btn) {
-        console.error('startShare button not found in DOM');
-        return;
+  const btn = document.getElementById('startShare');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const { joinRoom } = Trystero.torrent;
+      const room = joinRoom({ appId: 'p2p-screenshare' }, ROOM);
+
+      room.onPeerJoin(peerId => {
+        const call = room.addStream(stream, peerId);
+        call.on('error', console.error);
+      });
+
+    } catch (err) {
+      console.error(err);
     }
-    btn.addEventListener('click', startScreenShare);
+  });
 });
