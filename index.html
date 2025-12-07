@@ -102,9 +102,10 @@
         const payload = JSON.stringify(fullOffer);
         const compressed = LZString.compressToEncodedURIComponent(payload);
 
-        // Build viewer URL (viewer.html in same folder)
-        const url = window.location.origin + window.location.pathname.replace(/index\.html?$/,'viewer.html') + '?o=' + compressed;
-        viewerLink.value = url;
+        // Build viewer URL (viewer.html in same folder) — use URL() so it works reliably
+        const urlObj = new URL('viewer.html', window.location.href);
+        urlObj.searchParams.set('o', compressed);
+        viewerLink.value = urlObj.href;
         status.textContent = 'Offer ready. Share the viewer link.';
       } catch (err) {
         console.error(err);
