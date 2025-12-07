@@ -249,6 +249,7 @@
 
         async function initViewer(peerId) {
             try {
+                console.log('initViewer called with peerId:', peerId);
                 statusEl.textContent = 'Connecting to server...';
                 
                 // Initialize PeerJS
@@ -261,7 +262,8 @@
                     }
                 });
 
-                peer.on('open', async () => {
+                peer.on('open', async (myId) => {
+                    console.log('Viewer peer opened with ID:', myId);
                     statusEl.textContent = 'Getting microphone...';
                     
                     // Get microphone for viewer
@@ -275,17 +277,21 @@
                             },
                             video: false
                         });
+                        console.log('Viewer microphone obtained');
                     } catch (err) {
-                        console.log('Could not get microphone, continuing without audio');
+                        console.log('Could not get microphone, continuing without audio:', err);
                         viewerStream = new MediaStream();
                     }
 
+                    console.log('Calling sharer with ID:', peerId);
                     statusEl.textContent = 'Connecting to sharer...';
                     
                     // Call the sharer
                     call = peer.call(peerId, viewerStream);
+                    console.log('Call initiated');
 
                     call.on('stream', (remoteStream) => {
+                        console.log('Received remote stream:', remoteStream.getTracks());
                         remoteVideo.srcObject = remoteStream;
                         remoteVideo.classList.remove('hidden');
                         controlsDiv.classList.add('hidden');
@@ -316,7 +322,13 @@
                         }
                     });
 
+                    call.on('error', (err) => {
+                        console.error('Call error:', err);
+                        statusEl.textContent = 'Call error: ' + err.message;
+                    });
+
                     call.on('close', () => {
+                        console.log('Call closed');
                         statusEl.textContent = 'Connection closed';
                         controlsDiv.classList.remove('hidden');
                         remoteVideo.classList.add('hidden');
@@ -324,13 +336,13 @@
                 });
 
                 peer.on('error', (err) => {
+                    console.error('Peer error:', err);
                     statusEl.textContent = 'Error: ' + err.message;
-                    console.error(err);
                 });
 
             } catch (err) {
+                console.error('initViewer error:', err);
                 statusEl.textContent = 'Error: ' + err.message;
-                console.error(err);
             }
         }
 
