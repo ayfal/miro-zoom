@@ -191,6 +191,7 @@
                         ...screenStream.getTracks(),
                         ...audioStream.getTracks()
                     ]);
+                    console.log('Stream tracks:', localStream.getTracks().map(t => t.kind));
 
                     const viewerUrl = `${window.location.origin}${window.location.pathname}?id=${id}`;
                     linkDisplay.textContent = viewerUrl;
@@ -201,13 +202,13 @@
                 });
 
                 peer.on('call', (incomingCall) => {
-                    // Answer the call with our stream
-                    incomingCall.answer(localStream);
-                    statusEl.textContent = 'Connected! Sharing screen and audio.';
                     call = incomingCall;
+                    // Answer the call with our stream
+                    call.answer(localStream);
+                    statusEl.textContent = 'Connected! Sharing screen and audio.';
 
                     // Listen for when call ends
-                    incomingCall.on('close', () => {
+                    call.on('close', () => {
                         statusEl.textContent = 'Connection closed';
                     });
                 });
