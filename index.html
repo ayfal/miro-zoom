@@ -227,13 +227,7 @@
                     console.log('Incoming call from:', incomingCall.peer);
                     console.log('Answering with stream tracks:', localStream.getTracks().map(t => t.kind));
                     call = incomingCall;
-                    
-                    // Add each track individually
-                    localStream.getTracks().forEach(track => {
-                        call.peerConnection.addTrack(track, localStream);
-                    });
-                    
-                    call.answer();
+                    call.answer(localStream);
                     statusEl.textContent = 'Connected! Sharing screen and audio.';
 
                     call.on('close', () => {
@@ -297,7 +291,7 @@
                     console.log('Call initiated');
 
                     call.on('stream', (remoteStream) => {
-                        console.log('Received remote stream:', remoteStream.getTracks());
+                        console.log('Stream event fired, tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                         remoteVideo.srcObject = remoteStream;
                         remoteVideo.classList.remove('hidden');
                         controlsDiv.classList.add('hidden');
