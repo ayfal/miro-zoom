@@ -95,39 +95,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script>
-    // base64url helpers + pako wrapper (must match sender)
-    function base64UrlEncode(u8) {
-      let CHUNK = 0x8000;
-      let result = '';
-      for (let i = 0; i < u8.length; i += CHUNK) {
-        result += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
-      }
-      let b64 = btoa(result);
-      return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    }
-    function base64UrlDecode(str) {
-      str = str.replace(/-/g,'+').replace(/_/g,'/');
-      while (str.length % 4) str += '=';
-      const bin = atob(str);
-      const len = bin.length;
-      const u8 = new Uint8Array(len);
-      for (let i = 0; i < len; i++) u8[i] = bin.charCodeAt(i);
-      return u8;
-    }
-    function compressAndEncode(obj) {
-      const json = JSON.stringify(obj);
-      const def = pako.deflate(json);
-      return base64UrlEncode(def);
-    }
-    function decodeAndDecompress(str) {
-      const u8 = base64UrlDecode(str);
-      const infl = pako.inflate(u8);
-      const txt = new TextDecoder().decode(infl);
-      return JSON.parse(txt);
-    }
-
     const params = new URLSearchParams(location.search);
     const compressedOffer = params.get('o');
     const statusEl = document.getElementById('status');
@@ -152,9 +120,7 @@
     // base displayed size of the video (before scale)
     let baseWidth = 0, baseHeight = 0;
 
-    function setStatus(text) {
-      statusEl.textContent = text;
-    }
+    function setStatus(text) { statusEl.textContent = text; }
 
     function waitForIceComplete(pc, timeout = 10000) {
       return new Promise(resolve => {
@@ -169,7 +135,10 @@
     async function buildAnswerFromOffer(comp) {
       try {
         setStatus('Parsing offer...');
-        const offer = decodeAndDecompress(comp);
+        const json = LZString.decompressFromEncodedURIComponent(comp);
+        if (!json) throw new Error('Failed to decompress offer.');
+        const offer = JSON.parse(json);
+
         pc = new RTCPeerConnection();
         pc.ontrack = (evt) => {
           remote.srcObject = evt.streams[0];
@@ -186,9 +155,8 @@
         await waitForIceComplete(pc, 10000);
 
         const fullAnswer = pc.localDescription;
-        const compressed = compressAndEncode(fullAnswer);
-        answerOut.value = compressed;
-
+        const payload = JSON.stringify(fullAnswer);
+        compressedAnswer = LZString.compressToEncodedURIComponent(payload);
         answerReady = true;
 
         btnCopy.disabled = false;
@@ -215,7 +183,6 @@
           document.execCommand('copy');
           document.body.removeChild(ta);
         }
-        // show persistent visible indicator
         copiedBanner.classList.add('visible');
         btnCopy.disabled = true;
         btnCopy.textContent = 'Copied — waiting for session';
@@ -233,20 +200,14 @@
       setStatus('Session started');
     }
 
-    // compute baseWidth/baseHeight (displayed video size before scale) using intrinsic video size and viewport
     function computeBaseSize() {
       const vw = viewport.clientWidth;
       const vh = viewport.clientHeight;
-      // if intrinsic sizes available use them
       const vW = remote.videoWidth || vw;
       const vH = remote.videoHeight || vh;
       const ratio = Math.min(vw / vW, vh / vH);
-      baseWidth = vW * ratio;
-      baseHeight = vH * ratio;
-      // if base is slightly smaller than viewport due to rounding, keep it exact
-      baseWidth = Math.round(baseWidth);
-      baseHeight = Math.round(baseHeight);
-      // adjust pan to remain within new limits
+      baseWidth = Math.round(vW * ratio);
+      baseHeight = Math.round(vH * ratio);
       clampPan();
       applyTransform();
     }
@@ -270,16 +231,13 @@
     function applyZoom(v, centerClientX = null, centerClientY = null) {
       const oldZoom = zoom;
       zoom = Math.max(1, Math.min(4, v));
-      // if center provided, adjust pan so zoom focuses on that point
       if (centerClientX !== null && centerClientY !== null) {
         const rect = viewport.getBoundingClientRect();
-        const cx = centerClientX - rect.left - rect.width / 2; // client offset from center
+        const cx = centerClientX - rect.left - rect.width / 2;
         const cy = centerClientY - rect.top - rect.height / 2;
-        // scale pan so that the point under cursor stays roughly under cursor
         panX = (panX - cx) * (zoom / oldZoom) + cx;
         panY = (panY - cy) * (zoom / oldZoom) + cy;
       } else {
-        // scale relative to center
         panX = panX * (zoom / oldZoom);
         panY = panY * (zoom / oldZoom);
       }
@@ -287,9 +245,8 @@
       applyTransform();
     }
 
-    // pointer (mouse/touch) pan handlers
     function onPointerDown(e) {
-      if (zoom <= 1) return; // no pan when not zoomed
+      if (zoom <= 1) return;
       pointerActive = true;
       pointerId = e.pointerId;
       viewport.setPointerCapture(pointerId);
@@ -323,7 +280,7 @@
       // keyboard +/- adjust zoom
       window.addEventListener('keydown', (e) => {
         if (e.key === '+' || e.key === '=') { applyZoom(+(zoom + 0.2).toFixed(2)); }
-        else if (e.key === '-') { applyZoom(+(zoom - 0.2).toFixed(2)); }
+        else if (e.key === '-') { applyZoom(+(zoom - 0.2).toFixed(22)); }
       });
 
       // wheel to zoom (scroll up to zoom in) - keep center under cursor
