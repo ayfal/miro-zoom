@@ -106,7 +106,25 @@
         const urlObj = new URL('viewer.html', window.location.href);
         urlObj.searchParams.set('o', compressed);
         viewerLink.value = urlObj.href;
-        status.textContent = 'Offer ready. Share the viewer link.';
+
+        // copy the viewer link to clipboard (with fallback)
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(urlObj.href);
+            status.textContent = 'Offer ready. Viewer link copied to clipboard.';
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = urlObj.href;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            status.textContent = 'Offer ready. Viewer link copied to clipboard (fallback).';
+          }
+        } catch (copyErr) {
+          console.warn('Clipboard copy failed', copyErr);
+          status.textContent = 'Offer ready. Could not copy link — please copy manually.';
+        }
       } catch (err) {
         console.error(err);
         status.textContent = 'Error: ' + err;
@@ -115,7 +133,7 @@
 
     btnSetAnswer.onclick = async () => {
       if (!pc) {
-        status.textContent = 'No peer connection. Generate an offer first.';
+        status.textContent = 'No peer connection. Generate an offer first.'; 
         return;
       }
       const compressed = answerArea.value.trim();

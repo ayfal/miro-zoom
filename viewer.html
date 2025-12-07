@@ -5,95 +5,124 @@
   <title>PeerSharing — Viewer (High-Visibility)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root { --zoom: 1; --ui-height: 120px; }
+    :root { --zoom: 1; }
     html,body { height:100%; margin:0; background:#000; color:#fff; font-family: system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+    /* stage and viewport use as much screen as possible */
     .stage { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; }
-    /* video should take as much space as possible */
-    video#remote { max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain;
-      transform: scale(var(--zoom));
-      transition: transform .12s ease;
-      background:#000;
-      touch-action: none;
+    .viewport { width:100%; height:100%; overflow:hidden; display:flex; align-items:center; justify-content:center; touch-action:none; }
+    video#remote { width:100%; height:100%; object-fit:contain; transform-origin:center center; transform: translate(0px,0px) scale(var(--zoom)); transition: transform .06s linear; background:#000; will-change:transform; }
+
+    /* Large centered copy button (visible until session starts) */
+    .center-btn {
+      position:fixed;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      z-index:60;
+      background:#0078d4;
+      color:#fff;
+      border:none;
+      padding:28px 40px;
+      font-size:30px;
+      border-radius:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.6);
+      cursor:pointer;
+      opacity:0.98;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:14px;
+      min-width:420px;
+      text-align:center;
     }
-    /* UI overlay */
-    .overlay { position:fixed; left:0; right:0; bottom:0; height:var(--ui-height); background:linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.85)); display:flex; gap:12px; align-items:center; padding:16px; box-sizing:border-box; }
-    .overlay .left { flex:1; display:flex; flex-direction:column; gap:8px; }
-    .status { font-size:18px; line-height:1.1; color:#ffd; }
-    .copy-btn { background:#0078d4; color:#fff; border:none; padding:18px; font-size:20px; border-radius:8px; min-width:260px; cursor:pointer; }
-    .copy-btn:disabled { background:#555; opacity:0.6; cursor:not-allowed; }
-    .big-note { position:fixed; top:16px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:#fff; padding:12px 18px; border-radius:8px; font-size:20px; display:none; z-index:40; }
-    .big-note.visible { display:block; }
-    .controls { display:flex; gap:8px; align-items:center; }
-    .zoom-slider { width:220px; }
-    .zoom-label { font-size:16px; min-width:72px; text-align:center; }
-    .hide-ui { background:transparent; border:1px solid #888; color:#fff; padding:10px 12px; border-radius:8px; cursor:pointer; }
-    /* fullscreen hint */
-    .fs-hint { font-size:13px; color:#ccc; }
-    /* when session active hide overlay (use .session-started on body) */
-    body.session-started .overlay, body.session-started .big-note { display:none !important; }
-    /* Large accessible copy indicator that persists until session start */
-    .copied-banner { position:fixed; inset:auto 16px 16px 16px; background:#1b5e20; color:#fff; padding:14px 18px; border-radius:10px; font-size:18px; box-shadow:0 6px 18px rgba(0,0,0,0.6); z-index:45; display:none; }
+    .center-btn:disabled { background:#444; cursor:not-allowed; opacity:0.9; }
+
+    /* large persistent copied indicator */
+    .copied-banner {
+      position:fixed;
+      left:16px;
+      right:16px;
+      bottom:16px;
+      z-index:65;
+      background:#1b5e20;
+      color:#fff;
+      padding:18px;
+      font-size:20px;
+      border-radius:10px;
+      display:none;
+      box-shadow:0 8px 30px rgba(0,0,0,0.6);
+    }
     .copied-banner.visible { display:block; }
-    /* ensure overlay never covers entire screen on very small devices */
-    @media (max-height:420px) {
-      :root { --ui-height:160px; }
-      .overlay { flex-direction:column; align-items:stretch; height:var(--ui-height); }
+
+    /* small status in top center */
+    .status {
+      position:fixed;
+      top:12px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:62;
+      background:rgba(0,0,0,0.6);
+      color:#ffd;
+      padding:8px 12px;
+      border-radius:8px;
+      font-size:18px;
+    }
+
+    /* hide UI when session started */
+    body.session-started .center-btn,
+    body.session-started .copied-banner,
+    body.session-started .status { display:none !important; }
+
+    @media (max-width:640px) {
+      .center-btn { min-width:260px; padding:18px 22px; font-size:20px; border-radius:10px; }
+      .status { font-size:16px; }
     }
   </style>
 </head>
 <body>
-  <div class="stage" id="stage">
-    <video id="remote" autoplay playsinline></video>
+  <div class="stage">
+    <div class="viewport" id="viewport">
+      <video id="remote" autoplay playsinline></video>
+    </div>
   </div>
 
-  <div class="big-note" id="bigNote" aria-live="polite"></div>
+  <div class="status" id="status" aria-live="polite">Waiting for offer in URL...</div>
 
-  <div class="copied-banner" id="copiedBanner" role="status" aria-live="assertive">Copied to clipboard — send this to the sharer. Waiting for session to start...</div>
+  <button id="btnCopy" class="center-btn" disabled aria-live="polite">Preparing answer…</button>
 
-  <div class="overlay" id="overlay">
-    <div class="left">
-      <div class="status" id="status">Waiting for offer in URL...</div>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <div class="controls" aria-hidden="false">
-          <button class="hide-ui" id="fullscreenBtn" title="Toggle fullscreen">Fullscreen</button>
-          <div style="width:8px;"></div>
-          <div class="zoom-label">Zoom</div>
-          <input id="zoom" class="zoom-slider" type="range" min="1" max="3" step="0.05" value="1" />
-          <div class="zoom-label" id="zoomValue">100%</div>
-        </div>
-        <div style="flex:1"></div>
-        <div class="fs-hint">Use pinch or slider to magnify. Click fullscreen for max size.</div>
-      </div>
-    </div>
-
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-      <button id="btnCopy" class="copy-btn" aria-live="polite" disabled>Preparing answer…</button>
-      <button id="btnHide" class="hide-ui" title="Hide controls">Hide controls</button>
-    </div>
+  <div class="copied-banner" id="copiedBanner" role="status" aria-live="assertive">
+    Copied to clipboard — send this to the sharer. Waiting for session to start...
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <script>
-    // Short, focused script implementing requested behavior.
     const params = new URLSearchParams(location.search);
     const compressedOffer = params.get('o');
     const statusEl = document.getElementById('status');
     const remote = document.getElementById('remote');
+    const viewport = document.getElementById('viewport');
     const btnCopy = document.getElementById('btnCopy');
-    const bigNote = document.getElementById('bigNote');
     const copiedBanner = document.getElementById('copiedBanner');
-    const zoomInput = document.getElementById('zoom');
-    const zoomValue = document.getElementById('zoomValue');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
-    const overlay = document.getElementById('overlay');
-    const btnHide = document.getElementById('btnHide');
 
     let pc;
     let compressedAnswer = '';
     let answerReady = false;
     let sessionStarted = false;
+    let zoom = 1;
 
-    function setStatus(t) { statusEl.textContent = t; bigNote.textContent = t; }
+    // pan state (pixels)
+    let panX = 0, panY = 0;
+    let startPanX = 0, startPanY = 0;
+    let pointerActive = false;
+    let pointerId = null;
+    let startClientX = 0, startClientY = 0;
+
+    // base displayed size of the video (before scale)
+    let baseWidth = 0, baseHeight = 0;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
 
     function waitForIceComplete(pc, timeout = 10000) {
       return new Promise(resolve => {
@@ -124,19 +153,20 @@
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        setStatus('Waiting for ICE gathering to complete...');
+        setStatus('Waiting for ICE candidates...');
         await waitForIceComplete(pc, 10000);
 
         const fullAnswer = pc.localDescription;
         const payload = JSON.stringify(fullAnswer);
         compressedAnswer = LZString.compressToEncodedURIComponent(payload);
         answerReady = true;
+
         btnCopy.disabled = false;
-        btnCopy.textContent = 'Copy answer to clipboard';
+        btnCopy.textContent = 'Copy answer — send to sharer';
         setStatus('Answer ready. Copy and send it to the sharer.');
       } catch (err) {
         console.error(err);
-        setStatus('Error: ' + (err && err.message ? err.message : err));
+        setStatus('Error preparing answer: ' + (err && err.message ? err.message : err));
         btnCopy.disabled = true;
         btnCopy.textContent = 'Error preparing answer';
       }
@@ -148,7 +178,6 @@
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(compressedAnswer);
         } else {
-          // fallback
           const ta = document.createElement('textarea');
           ta.value = compressedAnswer;
           document.body.appendChild(ta);
@@ -156,79 +185,165 @@
           document.execCommand('copy');
           document.body.removeChild(ta);
         }
-        // show persistent, very visible indicator
+        // show persistent visible indicator
         copiedBanner.classList.add('visible');
-        bigNote.classList.add('visible');
-        bigNote.textContent = 'Copied — send this to the sharer';
-        // keep the copy button prominent (disable to avoid re-copy confusion)
         btnCopy.disabled = true;
         btnCopy.textContent = 'Copied — waiting for session';
+        setStatus('Copied to clipboard — send it to the sharer.');
       } catch (err) {
         console.error(err);
         setStatus('Copy failed: ' + (err && err.message ? err.message : err));
       }
     }
 
-    // When session starts (remote video has content and plays) hide UI and indicators
     function onSessionStarted() {
       if (sessionStarted) return;
       sessionStarted = true;
       document.body.classList.add('session-started');
-      copiedBanner.classList.remove('visible');
-      bigNote.classList.remove('visible');
-      // remove overlay from DOM focus for full viewing
       setStatus('Session started');
     }
 
-    // zoom handling
-    function updateZoom(v) {
-      document.documentElement.style.setProperty('--zoom', v);
-      zoomValue.textContent = Math.round(v * 100) + '%';
+    // compute baseWidth/baseHeight (displayed video size before scale) using intrinsic video size and viewport
+    function computeBaseSize() {
+      const vw = viewport.clientWidth;
+      const vh = viewport.clientHeight;
+      // if intrinsic sizes available use them
+      const vW = remote.videoWidth || vw;
+      const vH = remote.videoHeight || vh;
+      const ratio = Math.min(vw / vW, vh / vH);
+      baseWidth = vW * ratio;
+      baseHeight = vH * ratio;
+      // if base is slightly smaller than viewport due to rounding, keep it exact
+      baseWidth = Math.round(baseWidth);
+      baseHeight = Math.round(baseHeight);
+      // adjust pan to remain within new limits
+      clampPan();
+      applyTransform();
     }
 
-    // fullscreen toggle
-    async function toggleFullscreen() {
-      try {
-        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-        else await document.exitFullscreen();
-      } catch (e) { /* ignore */ }
+    function clampPan() {
+      const vw = viewport.clientWidth;
+      const vh = viewport.clientHeight;
+      const scaledWidth = baseWidth * zoom;
+      const scaledHeight = baseHeight * zoom;
+      const maxPanX = Math.max(0, (scaledWidth - vw) / 2);
+      const maxPanY = Math.max(0, (scaledHeight - vh) / 2);
+      panX = Math.max(-maxPanX, Math.min(maxPanX, panX));
+      panY = Math.max(-maxPanY, Math.min(maxPanY, panY));
     }
 
-    // initialize
+    function applyTransform() {
+      remote.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      document.documentElement.style.setProperty('--zoom', zoom);
+    }
+
+    function applyZoom(v, centerClientX = null, centerClientY = null) {
+      const oldZoom = zoom;
+      zoom = Math.max(1, Math.min(4, v));
+      // if center provided, adjust pan so zoom focuses on that point
+      if (centerClientX !== null && centerClientY !== null) {
+        const rect = viewport.getBoundingClientRect();
+        const cx = centerClientX - rect.left - rect.width / 2; // client offset from center
+        const cy = centerClientY - rect.top - rect.height / 2;
+        // scale pan so that the point under cursor stays roughly under cursor
+        panX = (panX - cx) * (zoom / oldZoom) + cx;
+        panY = (panY - cy) * (zoom / oldZoom) + cy;
+      } else {
+        // scale relative to center
+        panX = panX * (zoom / oldZoom);
+        panY = panY * (zoom / oldZoom);
+      }
+      clampPan();
+      applyTransform();
+    }
+
+    // pointer (mouse/touch) pan handlers
+    function onPointerDown(e) {
+      if (zoom <= 1) return; // no pan when not zoomed
+      pointerActive = true;
+      pointerId = e.pointerId;
+      viewport.setPointerCapture(pointerId);
+      startClientX = e.clientX;
+      startClientY = e.clientY;
+      startPanX = panX;
+      startPanY = panY;
+    }
+
+    function onPointerMove(e) {
+      if (!pointerActive || e.pointerId !== pointerId) return;
+      const dx = e.clientX - startClientX;
+      const dy = e.clientY - startClientY;
+      panX = startPanX + dx;
+      panY = startPanY + dy;
+      clampPan();
+      applyTransform();
+    }
+
+    function onPointerUp(e) {
+      if (!pointerActive || e.pointerId !== pointerId) return;
+      pointerActive = false;
+      try { viewport.releasePointerCapture(pointerId); } catch {}
+      pointerId = null;
+    }
+
+    // init
     (async () => {
-      // wire controls
-      zoomInput.addEventListener('input', () => updateZoom(zoomInput.value));
-      fullscreenBtn.addEventListener('click', toggleFullscreen);
       btnCopy.addEventListener('click', copyAnswer);
-      btnHide.addEventListener('click', () => { overlay.style.display = 'none'; });
 
-      // keyboard zoom +/- for convenience
+      // keyboard +/- adjust zoom
       window.addEventListener('keydown', (e) => {
-        if (e.key === '+' || e.key === '=') zoomInput.value = Math.min(parseFloat(zoomInput.max), (parseFloat(zoomInput.value) + 0.1).toFixed(2));
-        if (e.key === '-') zoomInput.value = Math.max(parseFloat(zoomInput.min), (parseFloat(zoomInput.value) - 0.1).toFixed(2));
-        updateZoom(zoomInput.value);
+        if (e.key === '+' || e.key === '=') { applyZoom(+(zoom + 0.2).toFixed(2)); }
+        else if (e.key === '-') { applyZoom(+(zoom - 0.2).toFixed(2)); }
       });
+
+      // wheel to zoom (scroll up to zoom in) - keep center under cursor
+      window.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) return; // avoid interfering with pinch-zoom on some platforms
+        if (Math.abs(e.deltaY) < 1) return;
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        applyZoom(+(zoom + delta).toFixed(2), e.clientX, e.clientY);
+      }, { passive: true });
+
+      // double-click to toggle a stronger zoom for quick readability (centered)
+      viewport.addEventListener('dblclick', (ev) => {
+        applyZoom(zoom < 2 ? 2.2 : 1, ev.clientX, ev.clientY);
+      });
+
+      // pointer events for pan
+      viewport.addEventListener('pointerdown', onPointerDown);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+
+      // handle resize to recalc base size and clamp pan
+      window.addEventListener('resize', computeBaseSize);
 
       // if no offer present
-      if (!compressedOffer) { setStatus('No offer found in URL. Use the sender link.'); return; }
+      if (!compressedOffer) {
+        setStatus('No offer found in URL. Use the sender link.');
+        btnCopy.disabled = true;
+        btnCopy.textContent = 'No offer';
+        return;
+      }
 
-      setStatus('Offer found — preparing session and auto-creating answer...');
+      setStatus('Offer found — creating answer automatically...');
       await buildAnswerFromOffer(compressedOffer);
 
-      // when remote video plays -> session started
-      remote.addEventListener('playing', () => {
-        onSessionStarted();
-      });
-
-      // Also detect tracks arriving from pc.ontrack earlier - some browsers may not fire playing immediately
-      // but remote.srcObject will be set by ontrack. If tracks are already present and readyState indicates playing, start session.
+      // when remote video has metadata we can compute base size
       remote.addEventListener('loadedmetadata', () => {
-        // attempt play to trigger 'playing'
+        computeBaseSize();
+        // try autoplay
         remote.play().catch(()=>{});
       });
 
-      // initial zoom
-      updateZoom(zoomInput.value);
+      // when remote video plays -> session started
+      remote.addEventListener('playing', () => onSessionStarted());
+
+      // if metadata never fires (some streams) fallback to compute on first frame
+      remote.addEventListener('resize', computeBaseSize);
+
+      // initial zoom (1x)
+      applyZoom(1);
     })();
   </script>
 </body>
