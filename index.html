@@ -25,10 +25,11 @@
   <h3>Viewer link (share this)</h3>
   <input type="text" id="viewerLink" readonly />
 
-  <h3 id="previewTitle">Sent preview — visible to viewer (appears after session starts)</h3>
+  <!-- renamed and clarified: Session indicator appears only after session starts -->
+  <h3 id="previewTitle">Session indicator — appears after session starts</h3>
   <div class="row">
     <div class="col">
-      <video id="localVideo" autoplay playsinline muted aria-label="Preview visible to viewer"></video>
+      <video id="localVideo" autoplay playsinline muted aria-label="Session indicator visible to viewer"></video>
     </div>
   </div>
 
@@ -73,10 +74,11 @@
     function showPreviewIfReady() {
       if (previewVisible) return;
       if (!screenStreamGlobal) return;
+      // attach only when session is confirmed
       localVideo.srcObject = screenStreamGlobal;
       localVideo.muted = true;
       previewVisible = true;
-      previewTitle.textContent = 'Sent preview — visible to viewer (active)';
+      previewTitle.textContent = 'Session indicator — visible to viewer (active)';
     }
 
     btnEnableMedia.onclick = async () => {
@@ -93,8 +95,8 @@
         audioStream.getAudioTracks().forEach(t => { pc.addTrack(t, audioStream); localStream.addTrack(t); });
         screenStream.getVideoTracks().forEach(t => { pc.addTrack(t, screenStream); localStream.addTrack(t); });
 
-        // show immediate local preview (optional) so sharer knows media is enabled
-        localVideo.srcObject = localStream;
+        // DO NOT show immediate preview here — session indicator must appear only after session starts
+        // localVideo.srcObject = localStream;  <-- removed so preview appears only after session is active
 
         mediaEnabled = true;
         btnOffer.disabled = false;
@@ -163,16 +165,17 @@
         await pc.setRemoteDescription(answer);
         status.textContent = 'Remote description set. Waiting for connection...';
 
+        // show session indicator only when connection is established
         pc.addEventListener('connectionstatechange', () => {
           if (pc.connectionState === 'connected' || pc.connectionState === 'completed') {
             showPreviewIfReady();
-            status.textContent = 'Session active — preview visible to viewer';
+            status.textContent = 'Session active — session indicator visible to viewer';
           }
         });
         pc.addEventListener('iceconnectionstatechange', () => {
           if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             showPreviewIfReady();
-            status.textContent = 'Session active — preview visible to viewer';
+            status.textContent = 'Session active — session indicator visible to viewer';
           }
         });
 
@@ -180,7 +183,7 @@
           if (!previewVisible) {
             if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
               showPreviewIfReady();
-              status.textContent = 'Session active — preview visible to viewer';
+              status.textContent = 'Session active — session indicator visible to viewer';
             }
           }
         }, 250);
