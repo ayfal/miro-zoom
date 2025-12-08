@@ -74,6 +74,8 @@
     let screenStreamGlobal = null;
     let previewVisible = false;
     let mediaEnabled = false;
+    let _disconnectTimer = null;
+    const DISCONNECT_DEBOUNCE_MS = 8000; // wait before treating transient disconnect as session end
 
     const btnEnableMedia = document.getElementById('btnEnableMedia');
     const btnOffer = document.getElementById('btnOffer');
@@ -194,21 +196,40 @@
         status.textContent = 'Remote description set. Waiting for connection...';
 
         // react to connection / ice state changes: show preview when connected, clear when disconnected/failed/closed
+        function onConnected() {
+          if (_disconnectTimer) { clearTimeout(_disconnectTimer); _disconnectTimer = null; }
+          showPreviewIfReady();
+          status.textContent = 'Session active — preview visible to viewer';
+        }
+        function scheduleClearOnTransient() {
+          if (_disconnectTimer) return;
+          _disconnectTimer = setTimeout(() => {
+            _disconnectTimer = null;
+            clearSessionIndicator();
+          }, DISCONNECT_DEBOUNCE_MS);
+        }
+
         pc.addEventListener('connectionstatechange', () => {
           const s = pc.connectionState;
           if (s === 'connected' || s === 'completed') {
-            showPreviewIfReady();
-            status.textContent = 'Session active — preview visible to viewer';
-          } else if (s === 'disconnected' || s === 'failed' || s === 'closed') {
+            onConnected();
+          } else if (s === 'disconnected') {
+            // transient network/tab change — wait before clearing
+            scheduleClearOnTransient();
+          } else if (s === 'failed' || s === 'closed') {
+            // hard failure — clear immediately
+            if (_disconnectTimer) { clearTimeout(_disconnectTimer); _disconnectTimer = null; }
             clearSessionIndicator();
           }
         });
         pc.addEventListener('iceconnectionstatechange', () => {
           const s = pc.iceConnectionState;
           if (s === 'connected' || s === 'completed') {
-            showPreviewIfReady();
-            status.textContent = 'Session active — preview visible to viewer';
-          } else if (s === 'disconnected' || s === 'failed' || s === 'closed') {
+            onConnected();
+          } else if (s === 'disconnected') {
+            scheduleClearOnTransient();
+          } else if (s === 'failed' || s === 'closed') {
+            if (_disconnectTimer) { clearTimeout(_disconnectTimer); _disconnectTimer = null; }
             clearSessionIndicator();
           }
         });
