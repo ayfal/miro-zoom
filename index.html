@@ -74,13 +74,28 @@
     function showPreviewIfReady() {
       if (previewVisible) return;
       if (!screenStreamGlobal) return;
-      // attach only when session is confirmed
+      // attach only the screen track(s) so the preview matches what viewer sees
       localVideo.srcObject = screenStreamGlobal;
       localVideo.muted = true;
       previewVisible = true;
-      previewTitle.textContent = 'Session indicator — visible to viewer (active)';
+      previewTitle.textContent = 'Sent preview — visible to viewer (active)';
     }
 
+    // Clear the session indicator (blank the preview shown to the sharer)
+    function clearSessionIndicator() {
+      try {
+        if (localVideo.srcObject) {
+          localVideo.srcObject = null;
+        }
+        localVideo.pause();
+        try { localVideo.removeAttribute('src'); } catch {}
+        try { localVideo.load(); } catch {}
+      } catch (e) { /* ignore */ }
+      previewVisible = false;
+      previewTitle.textContent = 'Session indicator — appears after session starts';
+      status.textContent = 'Viewer disconnected — session ended';
+    }
+    
     btnEnableMedia.onclick = async () => {
       try {
         status.textContent = 'Requesting screen & microphone permission...';
@@ -165,25 +180,31 @@
         await pc.setRemoteDescription(answer);
         status.textContent = 'Remote description set. Waiting for connection...';
 
-        // show session indicator only when connection is established
+        // react to connection / ice state changes: show preview when connected, clear when disconnected/failed/closed
         pc.addEventListener('connectionstatechange', () => {
-          if (pc.connectionState === 'connected' || pc.connectionState === 'completed') {
+          const s = pc.connectionState;
+          if (s === 'connected' || s === 'completed') {
             showPreviewIfReady();
-            status.textContent = 'Session active — session indicator visible to viewer';
+            status.textContent = 'Session active — preview visible to viewer';
+          } else if (s === 'disconnected' || s === 'failed' || s === 'closed') {
+            clearSessionIndicator();
           }
         });
         pc.addEventListener('iceconnectionstatechange', () => {
-          if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          const s = pc.iceConnectionState;
+          if (s === 'connected' || s === 'completed') {
             showPreviewIfReady();
-            status.textContent = 'Session active — session indicator visible to viewer';
+            status.textContent = 'Session active — preview visible to viewer';
+          } else if (s === 'disconnected' || s === 'failed' || s === 'closed') {
+            clearSessionIndicator();
           }
         });
-
+ 
         setTimeout(() => {
           if (!previewVisible) {
             if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
               showPreviewIfReady();
-              status.textContent = 'Session active — session indicator visible to viewer';
+              status.textContent = 'Session active — preview visible to viewer';
             }
           }
         }, 250);
