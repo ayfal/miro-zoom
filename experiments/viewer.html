@@ -393,6 +393,22 @@
           applyTransform();
         })();
       }
+
+      pc.addEventListener('iceconnectionstatechange', async () => {
+        if (!pc) return;
+        dbg('viewer iceConnectionState', pc.iceConnectionState);
+        if ((pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') && !pc._iceRestarting) {
+          pc._iceRestarting = true;
+          try {
+            dbg('attempting ICE restart (viewer)');
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            await waitForIceGatheringComplete(pc, 5000);
+            if (dc && dc.open) dc.send({ type: 'offer', sdp: pc.localDescription.toJSON(), iceRestart: true });
+          } catch (e) { dbg('iceRestart failed', e && e.message); }
+          finally { pc._iceRestarting = false; }
+        }
+      });
     })();
   </script>
  </body>
