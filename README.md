@@ -3,8 +3,6 @@
 Minimal, self-hosted one-click screen-share via WebRTC — no server required for signaling (SDP blobs are copied/shared).  
 Designed with low-friction, high-visibility UI for visually impaired viewers: large controls, high-contrast styles, keyboard zoom and simple workflows.
 
-Built by GitHub Copilot (using GPT-5 mini).
-
 ## Accessibility focus
 - Intended to help visually impaired viewers: large, high-contrast buttons and text; ARIA roles/labels where relevant.
 - Viewer can magnify the incoming video using keyboard (+ / -), wheel, double-click, or pinch, and drag the magnified view for easy inspection.
