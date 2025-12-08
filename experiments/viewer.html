@@ -269,7 +269,77 @@
       dbg('viewer page loaded. Ready.');
       updateStatus('Ready. Press the big CONNECT button (center) to begin.');
       setProgress('Ready. Press the big CONNECT button', 0);
-     })();
-   </script>
+
+      // Re-initialize zoom/pan (idempotent)
+      if (!window.__ps_zoom_initialized) {
+        window.__ps_zoom_initialized = true;
+        const remoteEl = document.getElementById('remote');
+        if (remoteEl) {
+          let zoom = 1, panX = 0, panY = 0;
+          const ZOOM_MIN = 1, ZOOM_MAX = 4, ZOOM_STEP = 0.12;
+          const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+          const applyTransform = () => {
+            document.documentElement.style.setProperty('--zoom', String(zoom));
+            document.documentElement.style.setProperty('--pan-x', panX + 'px');
+            document.documentElement.style.setProperty('--pan-y', panY + 'px');
+          };
+          const zoomTo = (newZoom, focalX = window.innerWidth/2, focalY = window.innerHeight/2) => {
+            newZoom = clamp(newZoom, ZOOM_MIN, ZOOM_MAX);
+            const prevZoom = zoom;
+            const rect = remoteEl.getBoundingClientRect();
+            const cx = rect.left + rect.width/2;
+            const cy = rect.top + rect.height/2;
+            const fx = focalX - cx;
+            const fy = focalY - cy;
+            panX = panX - fx * (newZoom/prevZoom - 1);
+            panY = panY - fy * (newZoom/prevZoom - 1);
+            zoom = newZoom;
+            applyTransform();
+          };
+
+          // wheel (ctrl/cmd) zoom
+          window.addEventListener('wheel', (e) => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+            zoomTo(clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX), e.clientX, e.clientY);
+          }, { passive: false });
+
+          // keyboard zoom
+          window.addEventListener('keydown', (e) => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomTo(clamp(zoom + ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)); }
+            else if (e.key === '-') { e.preventDefault(); zoomTo(clamp(zoom - ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)); }
+            else if (e.key === '0') { e.preventDefault(); zoom = 1; panX = 0; panY = 0; applyTransform(); }
+          });
+
+          // pointer pan
+          let dragging = false, last = {x:0,y:0};
+          remoteEl.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            dragging = true;
+            last.x = e.clientX; last.y = e.clientY;
+            remoteEl.setPointerCapture && remoteEl.setPointerCapture(e.pointerId);
+            remoteEl.style.cursor = 'grabbing';
+          });
+          window.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - last.x, dy = e.clientY - last.y;
+            last.x = e.clientX; last.y = e.clientY;
+            panX += dx; panY += dy;
+            applyTransform();
+          });
+          window.addEventListener('pointerup', (e) => {
+            if (!dragging) return;
+            dragging = false;
+            try { remoteEl.releasePointerCapture && remoteEl.releasePointerCapture(e.pointerId); } catch(e){}
+            remoteEl.style.cursor = 'grab';
+          });
+
+          applyTransform();
+        }
+      }
+    })();
+  </script>
  </body>
  </html>
