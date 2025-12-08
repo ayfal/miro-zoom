@@ -60,7 +60,6 @@
         setPhase('Requesting microphone permission...');
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
-          log('Acquired local microphone tracks:', localStream.getAudioTracks().map(t=>t.id+'['+t.kind+']'));
           setPhase('Microphone obtained. Initializing Peer and calling host...', true);
           peer = new Peer({ config: { iceServers: ICE_SERVERS } });
           peer.on('open', id => {
@@ -85,30 +84,12 @@
       function attachCallHandlers(call){
         if (!call) return;
         call.on('stream', remoteStream => {
-          log('Received remote stream (screen) tracks:', remoteStream.getTracks().map(t => t.kind+'['+t.id+']'));
+          log('Received remote stream (screen)');
           // attach to full-window video
           remoteVideo.srcObject = remoteStream;
-
-          // Attempt to play and surface errors
-          remoteVideo.play().then(() => {
-            log('remoteVideo.play() succeeded');
-          }).catch(e => {
-            log('remoteVideo.play() failed', e);
-            // If autoplay blocked, show message and keep connect button so user can retry after interacting.
-            setPhase('Unable to autoplay remote video due to browser policy. Tap the screen to start video.', true);
-            startBtn.classList.remove('hidden');
-          });
-
-          // If no video tracks were present, inform user via phase (debug)
-          const videoTracks = remoteStream.getVideoTracks();
-          if (!videoTracks || videoTracks.length === 0){
-            log('No video tracks in remoteStream; viewer will only hear audio.');
-            setPhase('No screen video received from host. Audio is playing.', true);
-          } else {
-            // hide phase and start button once we have remote content
-            phaseEl.classList.add('hidden');
-            startBtn.classList.add('hidden');
-          }
+          // hide phase and start button once we have remote content
+          phaseEl.classList.add('hidden');
+          startBtn.classList.add('hidden');
         });
         call.on('close', () => {
           log('Call closed by host');
@@ -173,10 +154,6 @@
           const now = Date.now();
           if (now - lastTap < 300){
             scale = 1; pos={x:0,y:0}; setTransform();
-            // if autoplay was blocked earlier, the tap should allow play
-            if (remoteVideo.paused && remoteVideo.srcObject) {
-              remoteVideo.play().then(()=>log('remoteVideo.play() after tap succeeded')).catch(err=>log('play after tap failed', err));
-            }
           }
           lastTap = now;
         });
