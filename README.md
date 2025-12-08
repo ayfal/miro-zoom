@@ -1,7 +1,7 @@
 # PeerSharing
 
 Minimal, self-hosted one-click screen-share via WebRTC — no server required for signaling (SDP blobs are copied/shared).  
-Designed with low-friction, high-visibility UI for visually impaired viewers: large controls, high-contrast styles, keyboard zoom and simple workflows.
+Designed for study-together sessions, with low-friction, high-visibility UI for visually impaired viewers: large controls, high-contrast styles, keyboard zoom and simple workflows.
 
 ## Accessibility focus
 - Intended to help visually impaired viewers: large, high-contrast buttons and text; ARIA roles/labels where relevant.
