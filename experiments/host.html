@@ -94,6 +94,9 @@
           const micStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
           // combine both into one stream
           localStream = new MediaStream([...screenStream.getVideoTracks(), ...micStream.getAudioTracks()]);
+
+          // DEBUG: list tracks we will send
+          log('Acquired localStream. videoTracks=', localStream.getVideoTracks().map(t => t.id + '/' + t.kind), 'audioTracks=', localStream.getAudioTracks().map(t => t.id + '/' + t.kind));
           hostPreview.srcObject = localStream;
           hostPreview.classList.remove('hidden');
           hostControls.classList.remove('hidden');
@@ -148,12 +151,25 @@
             peer.on('call', incomingCall => {
               log('Incoming call from', incomingCall.peer);
               setPhase('Incoming connection from viewer: ' + incomingCall.peer, true);
+
+              // Sanity: ensure we have at least one video track to send
+              if (!localStream || localStream.getVideoTracks().length === 0){
+                log('Warning: no video tracks to send to viewer. localStream tracks:', localStream && localStream.getTracks().map(t=>t.kind+'['+t.id+']'));
+                setPhase('Warning: screen track missing. Viewer may not receive video.', true);
+              }
+
               // answer with local media (screen + mic)
-              incomingCall.answer(localStream);
-              viewerCall = incomingCall;
+              try {
+                incomingCall.answer(localStream);
+                viewerCall = incomingCall;
+              } catch(e){
+                log('Error answering call', e);
+                setPhase('Error answering incoming call: ' + (e && e.message), true);
+                return;
+              }
 
               incomingCall.on('stream', remoteStream => {
-                log('Received remote stream (viewer audio?)');
+                log('Received remote stream (viewer audio?) tracks:', remoteStream.getTracks().map(t => t.kind+'['+t.id+']'));
                 // attach viewer audio playback for host to hear their mic
                 if (!viewerAudioEl){
                   viewerAudioEl = document.createElement('audio');
@@ -163,6 +179,8 @@
                   document.body.appendChild(viewerAudioEl);
                 }
                 viewerAudioEl.srcObject = remoteStream;
+                // try play and log if it fails (autoplay policies)
+                viewerAudioEl.play().catch(e => log('viewerAudioEl.play() failed', e));
                 setPhase('Viewer connected. Exchanging media...', true);
 
                 // Final established: remove phase messages after small timeout to indicate connected
