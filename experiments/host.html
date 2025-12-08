@@ -219,7 +219,8 @@
               pc.onicecandidate = (ev) => {
                 if (ev.candidate) {
                   dbg('sending ICE candidate to viewer');
-                  dc.send({type:'candidate', candidate: ev.candidate});
+                  // send serializable candidate object
+                  dc.send({type:'candidate', candidate: ev.candidate.toJSON()});
                 }
               };
 
@@ -232,16 +233,19 @@
                 controls.setAttribute('aria-hidden','false');
               };
 
-              await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+              // set remote description from the plain object received (msg.sdp)
+              await pc.setRemoteDescription(msg.sdp);
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
               dbg('sending SDP answer to viewer');
-              dc.send({ type:'answer', sdp: pc.localDescription });
+              // send serializable SDP (plain object)
+              dc.send({ type:'answer', sdp: pc.localDescription.toJSON() });
             } else if (msg.type === 'candidate') {
               if (currentPC && msg.candidate) {
                 dbg('adding received candidate to pc');
                 try {
-                  await currentPC.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                  // msg.candidate is plain object -> add directly
+                  await currentPC.addIceCandidate(msg.candidate);
                 } catch (e){
                   dbg('addIceCandidate error', e && e.message);
                 }

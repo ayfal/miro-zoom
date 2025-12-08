@@ -82,7 +82,8 @@
             if (msg.type === 'answer') {
               dbg('received SDP answer');
               try {
-                await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                // msg.sdp is a plain object (type/sdp) -> setRemoteDescription accepts that
+                await pc.setRemoteDescription(msg.sdp);
                 dbg('remote description set (answer)');
               } catch (e){
                 dbg('setRemoteDescription(answer) failed', e && e.message);
@@ -90,7 +91,8 @@
               }
             } else if (msg.type === 'candidate') {
               try {
-                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                // msg.candidate is a plain candidate object
+                await pc.addIceCandidate(msg.candidate);
                 dbg('added remote ICE candidate');
               } catch (e){
                 dbg('addIceCandidate error', e && e.message);
@@ -129,7 +131,8 @@
         pc.onicecandidate = (ev) => {
           if (ev.candidate && dc && dc.open) {
             dbg('sending ICE candidate to host');
-            dc.send({ type:'candidate', candidate: ev.candidate });
+            // send a plain-serializable candidate object
+            dc.send({ type:'candidate', candidate: ev.candidate.toJSON() });
           }
         };
 
@@ -159,7 +162,8 @@
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         dbg('sending SDP offer to host');
-        dc.send({ type:'offer', sdp: pc.localDescription });
+        // send serializable SDP (plain object)
+        dc.send({ type:'offer', sdp: pc.localDescription.toJSON() });
       }
 
       function cleanup(){
