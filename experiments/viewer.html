@@ -230,6 +230,24 @@
         try { localMic && localMic.getTracks().forEach(t=>t.stop()); } catch(e){}
       });
 
+      // Compatibility shim: some code still calls updateStatus().
+      // Map it to setProgress (if available) so it updates the progress UI instead of throwing.
+      function updateStatus(text){
+        try {
+          if (typeof setProgress === 'function') {
+            // Use a neutral progress value when unspecified
+            setProgress(text, 50);
+          } else {
+            // fallback: update progress text element directly if present
+            const el = document.getElementById('progressText');
+            if (el) el.textContent = text;
+            else console.log('status:', text);
+          }
+        } catch(e){
+          console.log('updateStatus error', e && e.message);
+        }
+      }
+
       dbg('viewer page loaded. Ready.');
       updateStatus('Ready. Press the big CONNECT button (center) to begin.');
       setProgress('Ready. Press the big CONNECT button', 0);
