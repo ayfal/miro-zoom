@@ -73,13 +73,34 @@
           updateStatus('Connecting to host "'+HOST_ID+'" ...');
           call = peer.call(HOST_ID, localStream);
           call.on('stream', remoteStream => {
-            dbg('received host stream (screen+audio)');
-            // show remote stream fullscreen
+            dbg('received host stream (screen+audio)', {
+              videoTracks: remoteStream.getVideoTracks().length,
+              audioTracks: remoteStream.getAudioTracks().length
+            });
+
+            // debug details for each track
+            remoteStream.getVideoTracks().forEach((t,i)=> dbg(`video track[${i}]`, {id:t.id, kind:t.kind, enabled:t.enabled, readyState:t.readyState, label:t.label}));
+            remoteStream.getAudioTracks().forEach((t,i)=> dbg(`audio track[${i}]`, {id:t.id, kind:t.kind, enabled:t.enabled, readyState:t.readyState, label:t.label}));
+
+            // attach stream to video element and attempt to play (user already interacted)
             remote.srcObject = remoteStream;
-            // once remote stream arrives, hide status and big button
-            bigBtn.style.display = 'none';
-            // Clear status after a short informative message
-            setTimeout(()=> updateStatus(''), 600);
+            remote.style.display = 'block';
+            remote.muted = false;
+            remote.play().then(()=> {
+              dbg('remote video.play() succeeded');
+              // once remote stream arrives, hide status and big button
+              bigBtn.style.display = 'none';
+              setTimeout(()=> updateStatus(''), 600);
+            }).catch(err=>{
+              dbg('remote video.play() failed', err && err.message);
+              // still hide the big button because stream arrived; show explanatory message
+              bigBtn.style.display = 'none';
+              if (remoteStream.getVideoTracks().length === 0) {
+                updateStatus('Connected: audio received but no video tracks were sent by host.');
+              } else {
+                updateStatus('Connected, but playback failed: ' + (err && err.message));
+              }
+            });
           });
           call.on('close', ()=> {
             dbg('call closed by host or network');
