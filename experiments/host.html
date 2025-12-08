@@ -26,6 +26,20 @@
     // Host fixed ID
     const HOST_ID = 'unique-studyroom-for-host-and-visually-impaired';
 
+    // simple debug helper: console + in-memory buffer
+    window.debugLogs = window.debugLogs || [];
+    function dbg(...args) {
+      try {
+        const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+        console.log('[HOST DEBUG]', msg);
+        window.debugLogs.push(`[${new Date().toISOString()}] ${msg}`);
+        // keep buffer to reasonable size
+        if (window.debugLogs.length > 500) window.debugLogs.shift();
+      } catch (e) { console.log('[HOST DEBUG] (log error)', e); }
+    }
+
+    dbg('Initializing host script', { HOST_ID });
+
     // ICE servers: Google STUN + OpenRelay TURN (demo credentials)
     const peer = new Peer(HOST_ID, {
       config: {
@@ -40,6 +54,8 @@
       }
     });
 
+    dbg('Peer object created, waiting for open event');
+
     const previewVideo = document.getElementById('previewVideo');
     const muteBtn = document.getElementById('muteBtn');
     const endBtn = document.getElementById('endBtn');
@@ -51,88 +67,124 @@
 
     // start capturing the host's screen automatically
     async function startShare() {
+      dbg('startShare() called');
       try {
         localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        dbg('getDisplayMedia success', { tracks: localStream.getTracks().map(t => t.kind + ':' + t.id) });
       } catch (e) {
-        console.error('Screen share denied or failed', e);
+        dbg('Screen share denied or failed', e && e.message ? e.message : e);
         return;
       }
 
       // show preview to host (muted to avoid audio loop)
       previewVideo.srcObject = localStream;
-      previewVideo.play().catch(()=>{});
+      previewVideo.play().catch(err => dbg('previewVideo.play() failed', err));
 
       // if a viewer already connected, call them immediately
       if (dataConn && dataConn.open) {
+        dbg('dataConn is open, making call to', dataConn.peer);
         makeCallTo(dataConn.peer);
+      } else {
+        dbg('no dataConn open yet, waiting for viewer connection');
       }
     }
 
     function makeCallTo(peerId) {
+      dbg('makeCallTo()', peerId);
       try {
-        if (currentCall) currentCall.close();
+        if (currentCall) {
+          dbg('Closing existing call before making new one', { callPeer: currentCall.peer });
+          currentCall.close();
+        }
         currentCall = peer.call(peerId, localStream);
-        currentCall.on('close', () => { currentCall = null; });
-        currentCall.on('error', () => { currentCall = null; });
+        dbg('Outgoing call created', { callPeer: peerId });
+        currentCall.on('close', () => { dbg('currentCall closed'); currentCall = null; });
+        currentCall.on('error', err => { dbg('currentCall error', err); currentCall = null; });
+        currentCall.on('stream', s => { dbg('unexpected: host received stream on outgoing call', s); });
       } catch (e) {
-        console.error('Call error', e);
+        dbg('Call error', e && e.message ? e.message : e);
       }
     }
 
     // accept incoming data connections from viewer(s)
     peer.on('connection', conn => {
+      dbg('peer.on(connection) from', conn.peer);
       dataConn = conn;
       conn.on('open', () => {
+        dbg('dataConn open with', conn.peer);
         // when viewer connects, immediately call it with the captured stream
-        if (localStream) makeCallTo(conn.peer);
+        if (localStream) {
+          dbg('localStream exists, calling viewer', conn.peer);
+          makeCallTo(conn.peer);
+        } else {
+          dbg('localStream not yet available when viewer connected');
+        }
         conn.on('data', d => {
-          if (d === 'end') cleanupAndClose();
+          dbg('dataConn received', d);
+          if (d === 'end') {
+            dbg('received end command from viewer');
+            cleanupAndClose();
+          }
         });
       });
-      conn.on('close', () => { dataConn = null; });
-      conn.on('error', () => { dataConn = null; });
+      conn.on('close', () => { dbg('dataConn closed for', conn.peer); dataConn = null; });
+      conn.on('error', err => { dbg('dataConn error', err); dataConn = null; });
     });
 
     peer.on('open', id => {
+      dbg('peer.on(open)', id);
       // automatically request screen capture when host peer is ready
-      console.log('Host peer open as', id);
       startShare();
     });
+
+    peer.on('disconnected', () => dbg('peer disconnected'));
+    peer.on('close', () => dbg('peer closed'));
 
     // mute/unmute (controls outgoing audio track)
     muteBtn.addEventListener('click', () => {
       audioMuted = !audioMuted;
       if (localStream) {
-        localStream.getAudioTracks().forEach(t => t.enabled = !audioMuted);
+        localStream.getAudioTracks().forEach(t => { t.enabled = !audioMuted; dbg('audio track set enabled=', t.enabled); });
+      } else {
+        dbg('mute toggle requested but no localStream available');
       }
       muteBtn.textContent = audioMuted ? 'Unmute' : 'Mute';
+      dbg('muteBtn toggled', { audioMuted });
     });
 
     endBtn.addEventListener('click', () => {
-      try { if (dataConn && dataConn.open) dataConn.send('end'); } catch(e){}
+      dbg('endBtn clicked, sending end to viewer (if available) and cleaning up');
+      try { if (dataConn && dataConn.open) { dataConn.send('end'); dbg('sent end to viewer'); } } catch(e){ dbg('failed sending end', e); }
       cleanupAndClose();
     });
 
     function cleanupUI() {
+      dbg('cleanupUI called');
       previewVideo.srcObject = null;
       if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
+        localStream.getTracks().forEach(t => { try { t.stop(); dbg('stopped track', t.kind, t.id); } catch(e){} });
         localStream = null;
       }
-      if (currentCall) { try { currentCall.close(); } catch(e){} currentCall = null; }
-      if (dataConn) { try { dataConn.close(); } catch(e){} dataConn = null; }
+      if (currentCall) { try { currentCall.close(); dbg('closed currentCall'); } catch(e){} currentCall = null; }
+      if (dataConn) { try { dataConn.close(); dbg('closed dataConn'); } catch(e){} dataConn = null; }
       muteBtn.textContent = 'Mute';
     }
 
     function cleanupAndClose() {
-      try { peer.destroy(); } catch(e){}
+      dbg('cleanupAndClose called');
+      try { peer.destroy(); dbg('peer.destroy() called'); } catch(e){ dbg('peer.destroy() failed', e); }
       cleanupUI();
       document.body.innerHTML = '<div style="color:#fff;padding:20px;background:#000">Session ended.</div>';
+      dbg('UI replaced with session ended message');
     }
 
     peer.on('error', err => {
-      console.error('Peer error', err);
+      dbg('Peer error', err && err.message ? err.message : err);
     });
+
+    // expose a quick getter for logs so you can copy them
+    window.getHostDebugLogs = () => (window.debugLogs || []).slice();
+    dbg('host script loaded and ready');
   </script>
 </body>
 </html>
