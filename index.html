@@ -4,37 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fullscreen Video Bookmarklet</title>
-    <script>
-        function toggleFullscreen() {
-            const video = document.querySelector('video[id^=""][id$="___screen"]');
-            if (video) {
-                if (video.requestFullscreen) {
-                    video.requestFullscreen();
-                } else if (video.mozRequestFullScreen) { // Firefox
-                    video.mozRequestFullScreen();
-                } else if (video.webkitRequestFullscreen) { // Chrome, Safari and Opera
-                    video.webkitRequestFullscreen();
-                } else if (video.msRequestFullscreen) { // IE/Edge
-                    video.msRequestFullscreen();
-                }
-                video.style.transform = 'scale(1.5)'; // Example zoom
-                video.style.transition = 'transform 0.5s'; // Smooth transition
-                video.style.cursor = 'grab'; // Change cursor to indicate draggable
-                video.onmousedown = function() {
-                    video.style.cursor = 'grabbing';
-                };
-                video.onmouseup = function() {
-                    video.style.cursor = 'grab';
-                };
-            } else {
-                alert('No video element found with the specified ID pattern.');
-            }
-        }
-    </script>
 </head>
 <body>
     <h1>Fullscreen Video Bookmarklet</h1>
-    <p>Drag the link below to your bookmarks toolbar:</p>
-    <a href="javascript:(function() { toggleFullscreen(); })();">Fullscreen Video Bookmarklet</a>
+    <p>Drag the link below to your bookmarks toolbar. Then open a page with a video whose ID ends with <code>___screen</code> and click the bookmark.</p>
+
+    <a href="javascript:(function(){var v=document.querySelector('video[id$=&quot;___screen&quot;]');if(!v){alert('No video with id ending ___screen found');return;}var origParent=v.parentNode, nextSibling=v.nextSibling, origStyle=v.getAttribute('style')||'';var overlay=document.createElement('div');overlay.id='bookmarklet-fullscreen-overlay';Object.assign(overlay.style,{position:'fixed',inset:'0',background:'rgba(0,0,0,0.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2147483647,overflow:'hidden'});var container=document.createElement('div');Object.assign(container.style,{position:'relative',touchAction:'none',cursor:'grab',maxWidth:'100%',maxHeight:'100%',display:'flex',alignItems:'center',justifyContent:'center'});var close=document.createElement('button');close.innerHTML='✕';Object.assign(close.style,{position:'absolute',right:'12px',top:'12px',zIndex:2147483648,fontSize:'20px',background:'#0008',color:'#fff',border:'0',padding:'6px 10px',borderRadius:'6px',cursor:'pointer'});var info=document.createElement('div');info.textContent='Drag to pan · Wheel to zoom · Double-click to toggle fullscreen · Esc to close';Object.assign(info.style,{position:'absolute',left:'12px',top:'12px',zIndex:2147483648,color:'#fff',fontSize:'12px',background:'#0006',padding:'6px 8px',borderRadius:'6px'});container.appendChild(v);overlay.appendChild(container);overlay.appendChild(close);overlay.appendChild(info);document.documentElement.appendChild(overlay);v.style.maxWidth='none';v.style.maxHeight='none';v.style.touchAction='none';v.style.cursor='grab';v.controls=true;var scale=1,tx=0,ty=0,dragging=false,startX=0,startY=0,startTx=0,startTy=0;function apply(){v.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';}container.addEventListener('wheel',function(e){e.preventDefault();var delta=e.deltaY>0?0.9:1.1;var prev=scale;scale=Math.max(0.2,Math.min(5,scale*delta));var rect=v.getBoundingClientRect();var cx=e.clientX-rect.left,cy=e.clientY-rect.top;tx=tx-(cx)*(scale/prev-1);ty=ty-(cy)*(scale/prev-1);apply();},{passive:false});container.addEventListener('pointerdown',function(e){e.preventDefault();dragging=true;container.setPointerCapture(e.pointerId);container.style.cursor='grabbing';startX=e.clientX;startY=e.clientY;startTx=tx;startTy=ty;});container.addEventListener('pointermove',function(e){if(!dragging)return;tx=startTx+(e.clientX-startX);ty=startTy+(e.clientY-startY);apply();});container.addEventListener('pointerup',function(e){dragging=false;try{container.releasePointerCapture(e.pointerId);}catch(_){};container.style.cursor='grab';});v.addEventListener('dblclick',function(e){var fs=document.fullscreenElement; if(!fs)overlay.requestFullscreen().catch(()=>{});else document.exitFullscreen().catch(()=>{});});function cleanup(){try{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});}catch(e){};try{close.removeEventListener('click',onClose);}catch(e){};try{document.removeEventListener('keydown',onKey);}catch(e){};overlay.parentNode&&overlay.parentNode.removeChild(overlay); if(origParent) origParent.insertBefore(v,nextSibling); v.setAttribute('style',origStyle);}function onClose(){cleanup();}function onKey(e){if(e.key==='Escape')cleanup();}close.addEventListener('click',onClose);document.addEventListener('keydown',onKey);})();">Fullscreen Video Bookmarklet</a>
+
 </body>
 </html>
