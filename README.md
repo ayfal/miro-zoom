@@ -1,34 +1,30 @@
-# MiroZoom — Mirotalk Zoom/Pan Utility
+# Bookmarklet Fullscreen Video
 
-Small utility to isolate a Mirotalk screen-share video into a fullscreen, zoomable and pannable overlay.
+This project provides a bookmarklet that allows users to find a video element on a webpage, specifically targeting video elements with IDs that start with random characters and end with `___screen`. Once the video is identified, the bookmarklet enables fullscreen mode and provides zoom and pan capabilities.
 
-## Key points
-- Targets the shared-screen video element (video elements whose id ends with `___screen`).
-- Does NOT remove or relocate the original UI element that provides audio. Instead it creates a muted mirrored video in an overlay so audio continues to play from the original page element.
-- Overlay features:
-  - Mouse-wheel zoom (cursor-centered)
-  - Click-and-drag pan
-  - Double-click to reset
-  - Esc or click outside to close
-  - Touch pinch/drag support
-  - Requests fullscreen when possible
-- Designed for low-vision users (index.html includes a large-font, high-contrast UI and an accessible copy flow).
+## How to Use
 
-## Files
-- index.html — accessible install page with a draggable bookmarklet link and a copy-to-clipboard option.
-- (Optional) client/mirozoom.js, client/mirozoom.css — suggested files if this feature is integrated into the Mirotalk client.
+1. **Add the Bookmarklet to Your Browser:**
+   - Drag the bookmarklet link from the `index.html` file to your bookmarks toolbar. 
+   - Alternatively, you can create a new bookmark in your browser and paste the JavaScript code provided in the `index.html` file as the URL.
 
-## Usage
-1. Install the bookmarklet by dragging the "MiroZoom" link from index.html to your browser bookmarks bar or use the "Copy bookmarklet" button and add it manually in your bookmarks manager.
-2. Join a Mirotalk room and wait for screen-sharing to start.
-3. Activate the bookmarklet:
-   - A fullscreen overlay appears showing a muted mirrored video of the shared screen.
-   - Use mouse wheel to zoom, drag to pan, double-click to reset, Esc to close. Audio remains coming from the original Mirotalk UI element.
+2. **Activate the Bookmarklet:**
+   - Navigate to a webpage that contains a video element with an ID matching the specified pattern (e.g., `U7YS7UV5HfaPb-iPAZFF___screen`).
+   - Click on the bookmarklet in your bookmarks toolbar.
 
-## Notes for maintainers
-- This approach is non-invasive and preserves page audio by leaving the original video element in place.
-- To integrate as a built-in feature, move the overlay logic into the client bundle and attach activation to the UI (see prior PR plan artifacts).
-- Accessibility: index.html contains a large-font dark theme and an accessible copy path for users who cannot drag links.
+3. **Fullscreen and Zoom/Pan:**
+   - The video will automatically enter fullscreen mode.
+   - Use your mouse or touch gestures to zoom and pan around the video as needed.
+
+## Requirements
+
+- This bookmarklet is designed to work in modern web browsers that support the Fullscreen API and CSS transformations.
+
+## Limitations
+
+- The bookmarklet will only work on pages where the video element is present and matches the ID criteria.
+- Ensure that your browser settings allow for fullscreen requests from JavaScript.
 
 ## License
-MIT
+
+This project is open-source and available for modification and redistribution under the MIT License.
